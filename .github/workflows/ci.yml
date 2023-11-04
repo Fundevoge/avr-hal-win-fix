@@ -34,6 +34,9 @@ jobs:
             name: sparkfun-promicro
             examples: true
           - type: board
+            name: sparkfun-promini-5v
+            examples: true
+          - type: board
             name: trinket-pro
             examples: true
           - type: board
@@ -48,6 +51,10 @@ jobs:
           - type: mcu
             name: atmega1280
             spec: atmega1280
+            crate: atmega-hal
+          - type: mcu
+            name: atmega32a
+            spec: atmega32a
             crate: atmega-hal
           - type: mcu
             name: atmega128a
