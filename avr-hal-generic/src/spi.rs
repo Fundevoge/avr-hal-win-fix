@@ -114,6 +114,36 @@ impl<CSPIN: port::PinOps> hal::digital::v2::ToggleableOutputPin for ChipSelectPi
     }
 }
 
+/// Wrapper for the CS pin in PWM Mode
+///
+/// Used to contain the chip-select pin during operation to prevent its mode from being
+/// changed from Output. This is necessary because the SPI state machine would otherwise
+/// reset itself to SPI slave mode immediately. This wrapper can be used just like a
+/// pwm output pin, because it implements all the same traits.
+pub struct ChipSelectPinPwm<CSPIN, TC>(port::Pin<port::mode::PwmOutput<TC>, CSPIN>);
+
+impl<TC, CSPIN: crate::simple_pwm::PwmPinOps<TC>> ChipSelectPinPwm<CSPIN, TC> {
+    pub fn enable(&mut self) {
+        self.0.pin.enable();
+    }
+
+    pub fn disable(&mut self) {
+        self.0.pin.disable();
+    }
+
+    pub fn get_duty(&self) -> <CSPIN as crate::simple_pwm::PwmPinOps<TC>>::Duty {
+        self.0.pin.get_duty()
+    }
+
+    pub fn get_max_duty(&self) -> <CSPIN as crate::simple_pwm::PwmPinOps<TC>>::Duty {
+        self.0.pin.get_max_duty()
+    }
+
+    pub fn set_duty(&mut self, duty: u8) {
+        self.0.pin.set_duty(duty);
+    }
+}
+
 /// Behavior for a SPI interface.
 ///
 /// Stores the SPI peripheral for register access.  In addition, it takes
@@ -163,6 +193,34 @@ where
         };
         spi.p.raw_setup(&settings);
         (spi, ChipSelectPin(cs))
+    }
+
+    /// Instantiate a SPI with the registers, SCLK/MOSI/MISO/CS pins, and settings,
+    /// with the internal pull-up enabled on the MISO pin.
+    ///
+    /// The pins are not actually used directly, but they are moved into the struct in
+    /// order to enforce that they are in the correct mode, and cannot be used by anyone
+    /// else while SPI is active.  CS is placed into a `ChipSelectPinPwm` instance and given
+    /// back so that its output state can be changed as needed.
+    pub fn new_with_pwm<TC>(
+        p: SPI,
+        sclk: port::Pin<port::mode::Output, SCLKPIN>,
+        mosi: port::Pin<port::mode::Output, MOSIPIN>,
+        miso: port::Pin<port::mode::Input<port::mode::PullUp>, MISOPIN>,
+        cs: port::Pin<port::mode::PwmOutput<TC>, CSPIN>,
+        settings: Settings,
+    ) -> (Self, ChipSelectPinPwm<CSPIN, TC>) {
+        let mut spi = Self {
+            p,
+            sclk,
+            mosi,
+            miso: miso.forget_imode(),
+            write_in_progress: false,
+            _cs: PhantomData,
+            _h: PhantomData,
+        };
+        spi.p.raw_setup(&settings);
+        (spi, ChipSelectPinPwm(cs))
     }
 
     /// Instantiate an SPI with the registers, SCLK/MOSI/MISO/CS pins, and settings,
